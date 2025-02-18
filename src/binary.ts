@@ -157,50 +157,59 @@ export class Installer {
   }
 
   private async install(release: github.Release): Promise<Result<void>> {
-    let platform = getPlatform();
-    if (platform instanceof Error) {
-      return platform;
-    }
-    let name = `buf-${platform}.tar.gz`;
-    let asset;
-    for (let blob of release.assets) {
-      if (blob.name === name) {
-        asset = blob;
-        break;
-      }
-    }
-    if (!asset) {
-      return new Error(`Could not find ${platform} among release assets for ${release.tag_name}`);
+    let asset = findAsset(release);
+    if (asset instanceof Error) {
+      return asset;
     }
 
-    // Download the tarball into the temporary downloads directory.
-    let tarball = path.join(this.storageDir, `buf-${release.name}-${platform}.tar.gz`);
-    if (!fs.existsSync(tarball)) {
+    // Download the asset file into the temporary downloads directory.
+    let assetFile = path.join(this.storageDir, appendReleaseVersionToFilename(release.name, asset));
+    if (!fs.existsSync(assetFile)) {
       // Don't bother downloading if we've already got that version. This is
       // primarily to aid e.g. offline testing.
       fs.mkdirSync(this.storageDir, { recursive: true });
-      let result = await fetch.download(asset.browser_download_url, tarball, new AbortController());
+      let result = await fetch.download(asset.browser_download_url, assetFile, new AbortController());
       if (result instanceof Error) {
         return result;
       }
     }
 
-    // Extract the tarfile into the install directory.
-    try {
-      let extracted = path.join(this.storageDir, `buf-${release.name}`);
-      let target = path.join(this.storageDir, 'bin');
-      await promisify(stream.pipeline)(
-        fs.createReadStream(tarball),
-        gunzip(),
-        tar.extract(extracted),
-      );
-      
-      if (fs.existsSync(target)) {
-        fs.unlinkSync(target);
+    if (assetFile.endsWith(".tar.gz")) {
+      // Extract the tarfile into the install directory.
+      try {
+        let extracted = path.join(this.storageDir, `buf-${release.name}`);
+        let target = path.join(this.storageDir, 'bin');
+        await promisify(stream.pipeline)(
+          fs.createReadStream(assetFile),
+          gunzip(),
+          tar.extract(extracted),
+        );
+        
+        if (fs.existsSync(target)) {
+          fs.unlinkSync(target);
+        }
+        fs.symlinkSync(path.join(extracted, 'buf/bin'), target);
+      } catch (e) {
+        return new Error(`Failed to extract ${assetFile}: ${e}`);
       }
-      fs.symlinkSync(path.join(extracted, 'buf/bin'), target);
-    } catch (e) {
-      return new Error(`Failed to extract ${tarball}: ${e}`);
+    } else {
+      try {
+        let output = child.spawnSync(assetFile, [], {
+          cwd: this.storageDir,
+          encoding: "utf-8",
+          shell: process.platform === "win32",
+        });
+    
+        if (output.error !== undefined) {
+          return new Error(output.error.message);
+        }
+    
+        if (output.stderr.trim() !== "") {
+          return new Error(output.stderr.trim());
+        }
+      } catch(e) {
+        return new Error(`Failed to install buf from ${assetFile}: ${e}`);
+      }
     }
   }
 
@@ -229,7 +238,7 @@ export function findWorkspacePath(): Result<string> {
   return uri.fsPath;
 }
 
-function getPlatform(): Result<string> {
+function findAsset(release: github.Release): Result<github.Asset> {
   let osName, archName;
   switch (os.platform()) {
     case "linux":
@@ -251,9 +260,19 @@ function getPlatform(): Result<string> {
       break;
   }
 
-  if (!osName || !archName) {
-    return new Error(`Unsupported platform: ${os.platform()}-${os.arch()}.`);
+  let platform = `${osName}-${archName}`;
+
+  for (let asset of release.assets) {
+    if (asset.name.startsWith(platform)) {
+      return asset;
+    }
   }
 
-  return `${osName}-${archName}`;
+  return new Error(`Could not find ${platform} among release assets for ${release.tag_name}`);
+}
+
+function appendReleaseVersionToFilename(release: string, asset: github.Asset): string {
+  let basename = path.basename(asset.name), ext = path.extname(asset.name);
+
+  return `${basename}-${release}${ext}`;
 }
