@@ -170,7 +170,7 @@ export class Installer {
       return asset;
     }
 
-    // Download the tarball into the temporary downloads directory.
+    // Download the asset into the temporary downloads directory.
     let assetPath = path.join(this.storageDir, getVersionedAssetName(asset, release.tag_name));
     if (!fs.existsSync(assetPath)) {
       // Don't bother downloading if we've already got that version. This is
@@ -183,7 +183,10 @@ export class Installer {
     }
 
     if (os.platform() === "win32") {
-      return new Error("Windows is not supported yet.");
+      if (!fs.existsSync(path.join(this.storageDir, "bin"))) {
+        fs.mkdirSync(path.join(this.storageDir, "bin"), { recursive: true });
+      }
+      fs.symlinkSync(assetPath, this.bundledPath());
     } else {
       // Extract the tarfile into the install directory.
       try {
