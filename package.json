@@ -2,7 +2,7 @@
   "name": "vscode-buf",
   "displayName": "Buf",
   "description": "Visual Studio Code support for Buf",
-  "version": "0.7.0-devel",
+  "version": "0.7.1-devel",
   "icon": "logo.png",
   "publisher": "bufbuild",
   "repository": {
@@ -74,7 +74,6 @@
         "VSCode currently ignores 'title' in configuration.properties, so the names of",
         "properties are chosen to generate user-friendly names in the GUI",
         "https://github.com/microsoft/vscode/issues/124438",
-      
         "When adding a new property, make sure to update `config.ts` in this repo,",
         "and `buflsp/config.go` in bufbuild/buf."
       ],
@@ -186,15 +185,15 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.6",
-    "@types/node": "^20.x",
+    "@types/node": "^20.17.19",
     "@types/vscode": "^1.83.1",
     "@typescript-eslint/eslint-plugin": "^6.20.0",
     "@typescript-eslint/parser": "^6.21.0",
     "@vscode/test-cli": "0.0.4",
     "@vscode/test-electron": "^2.3.9",
+    "@vscode/vsce": "^2.15.0",
     "eslint": "^8.56.0",
     "mocha": "^10.2.0",
-    "typescript": "^5.7.2",
-    "@vscode/vsce": "^2.15.0"
+    "typescript": "^5.7.2"
   }
 }

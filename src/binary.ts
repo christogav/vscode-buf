@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as child from 'child_process';
+import * as child from "child_process";
 import * as config from "./config";
 import * as fetch from "./fetch";
 import * as fs from "fs";
 import * as github from "./github";
-import * as os from 'os';
+import * as os from "os";
 import * as path from "path";
-import * as semver from 'semver';
-import * as stream from 'stream';
-import * as tar from 'tar-fs';
+import * as semver from "semver";
+import * as stream from "stream";
+import * as tar from "tar-fs";
 import * as vscode from "vscode";
 
 import { Error, Result } from "./error";
 
-import {AbortController} from 'abort-controller';
-import {default as gunzip} from 'gunzip-maybe';
-import { promisify } from 'util';
+import { AbortController } from "abort-controller";
+import { default as gunzip } from "gunzip-maybe";
+import { promisify } from "util";
 
 // This is the earliest version that has buf lsp support.
-const minVersion = 'v1.43.0';
+const minVersion = "v1.43.0";
 
 /**
  * A located Buf CLI binary.
@@ -60,7 +60,7 @@ export class Binary {
     } else {
       return output.stdout.trim();
     }
-  } 
+  }
 }
 
 export class Installer {
@@ -260,7 +260,7 @@ function getPlatform(): Result<string> {
       archName = "x86_64";
       break;
     case "arm64":
-      archName = osName === "Linux" ? "aarch64": "arm64";
+      archName = osName === "Linux" ? "aarch64" : "arm64";
       break;
   }
 

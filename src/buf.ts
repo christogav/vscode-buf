@@ -217,17 +217,3 @@ export const lint = (binaryPath: string, filePath: string, cwd: string): Result<
     .split("\n")
     .filter((s) => s.trim().length > 0);
 };
-
-export const version = (binaryPath: string): Version | Error => {
-  const output = child_process.spawnSync(binaryPath, ["--version"], {
-    encoding: "utf-8",
-    shell: process.platform === "win32",
-  });
-  if (output.error !== undefined) {
-    return { errorMessage: output.error.message };
-  }
-  if (output.stderr.trim() !== "") {
-    return parse(output.stderr.trim());
-  }
-  return parse(output.stdout.trim());
-};
