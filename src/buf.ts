@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import * as child from "child_process";
-import * as lsp from 'vscode-languageclient/node';
+import * as lsp from "vscode-languageclient/node";
 import * as vscode from "vscode";
 
 import { Binary, Installer } from "./binary";
@@ -44,7 +44,7 @@ export class Context extends vscode.Disposable {
         await vscode.window.showErrorMessage(`${binary}`);
         continue;
       }
-      
+
       this.binary = binary;
       break;
     }
@@ -54,10 +54,13 @@ export class Context extends vscode.Disposable {
       command: this.binary.path,
       transport: lsp.TransportKind.pipe,
       args: [
-        '--debug', // This will get dumped into the output pane.
-        '--timeout', '0',
-        '--log-format', 'text',
-        'beta', 'lsp',
+        "--debug", // This will get dumped into the output pane.
+        "--timeout",
+        "0",
+        "--log-format",
+        "text",
+        "beta",
+        "lsp",
       ],
       options: {
         cwd: this.binary.cwd,
@@ -65,10 +68,12 @@ export class Context extends vscode.Disposable {
     };
 
     let client: lsp.LanguageClientOptions = {
-      documentSelector: [{
-        scheme: 'file',
-        language: 'proto',
-      }],
+      documentSelector: [
+        {
+          scheme: "file",
+          language: "proto",
+        },
+      ],
       outputChannel: output,
       // Do not switch to output window when buf lsp returns output.
       revealOutputChannelOn: lsp.RevealOutputChannelOn.Error,
@@ -85,32 +90,36 @@ export class Context extends vscode.Disposable {
     this.subscriptions.push(this.statusItem);
 
     this.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => this.updateStatus()));
-    this.subscriptions.push(this.client.onDidChangeState((_) => {
-      if (this.client.state === lsp.State.Stopped) {
-        this.status.health = "stopped";
-        this.status.message = "Server is currently not running.";
-      } else {
-        this.status.health = "ok";
-      }
-      this.status.ongoing.clear();
+    this.subscriptions.push(
+      this.client.onDidChangeState((_) => {
+        if (this.client.state === lsp.State.Stopped) {
+          this.status.health = "stopped";
+          this.status.message = "Server is currently not running.";
+        } else {
+          this.status.health = "ok";
+        }
+        this.status.ongoing.clear();
 
-      this.updateStatus();
-    }));
-    this.subscriptions.push(this.client.onNotification("$/progress", (params) => {
-      switch (params.value.kind) {
-        case "begin":
-          this.status.ongoing.add(params.token);
-          break;
-        case "end":
-          this.status.ongoing.delete(params.token);
-          break;
-      }
+        this.updateStatus();
+      })
+    );
+    this.subscriptions.push(
+      this.client.onNotification("$/progress", (params) => {
+        switch (params.value.kind) {
+          case "begin":
+            this.status.ongoing.add(params.token);
+            break;
+          case "end":
+            this.status.ongoing.delete(params.token);
+            break;
+        }
 
-      this.updateStatus();
-    }));
+        this.updateStatus();
+      })
+    );
 
     await this.client.start();
-    console.log('Buf Language Server is now active!');
+    console.log("Buf Language Server is now active!");
   }
 
   clientError(error: Error) {
@@ -160,9 +169,10 @@ export class Context extends vscode.Disposable {
 
     this.statusItem.tooltip.appendMarkdown(
       "[$(terminal) Reveal Server Output](command:buf.outputPanel)\n\n" +
-      "[$(debug-stop) Stop Server](command:buf.stopServer)\n\n" +
-      "[$(debug-restart) Restart Server](command:buf.restartServer)\n\n" +
-      "---\n\nBuf Language Server " + this.binary.version()
+        "[$(debug-stop) Stop Server](command:buf.stopServer)\n\n" +
+        "[$(debug-restart) Restart Server](command:buf.restartServer)\n\n" +
+        "---\n\nBuf Language Server " +
+        this.binary.version()
     );
 
     if (this.status.health !== "stopped" && this.status.ongoing.size > 0) {
@@ -177,7 +187,9 @@ export class Context extends vscode.Disposable {
   }
 
   dispose() {
-    this.subscriptions.forEach((d) => { d.dispose(); });
+    this.subscriptions.forEach((d) => {
+      d.dispose();
+    });
     if (this.client) {
       this.client.stop();
     }
@@ -185,25 +197,37 @@ export class Context extends vscode.Disposable {
   }
 }
 
-export const lint = (
-  binaryPath: string,
-  filePath: string,
-  cwd: string
-): Result<string[]> => {
+export const lint = (binaryPath: string, filePath: string, cwd: string): Result<string[]> => {
   const output = child.spawnSync(
     binaryPath,
-    ["lint", filePath + "#include_package_files=true", "--error-format=json"],
+    ["lint", `"${filePath}"` + "#include_package_files=true", "--error-format=json"],
     {
       encoding: "utf-8",
       cwd: cwd,
       shell: process.platform === "win32",
     }
   );
+  // If the command fails to run, such as a failed module/workspace build, return the error.
+  if (output.status === 1) {
+    return output.stderr.trim().split("\n");
+  }
+  // If the command succeeds with no lint failures and an empty output will be returned.
+  return output.stdout
+    .trim()
+    .split("\n")
+    .filter((s) => s.trim().length > 0);
+};
+
+export const version = (binaryPath: string): Version | Error => {
+  const output = child_process.spawnSync(binaryPath, ["--version"], {
+    encoding: "utf-8",
+    shell: process.platform === "win32",
+  });
   if (output.error !== undefined) {
-    return new Error(output.error.message);
+    return { errorMessage: output.error.message };
   }
-  if (output.status !== null && output.status === 0) {
-    return [];
+  if (output.stderr.trim() !== "") {
+    return parse(output.stderr.trim());
   }
-  return output.stdout.trim().split("\n");
+  return parse(output.stdout.trim());
 };
