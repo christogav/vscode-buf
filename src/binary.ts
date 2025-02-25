@@ -122,6 +122,11 @@ export class Installer {
     if (release instanceof Error) {
       return release;
     }
+
+    if (!release || !release.tag_name) {
+      return new Error("Could not find latest release.");
+    }
+
     let latest = release.tag_name;
 
     let checkForUpdates = vscode.workspace.getConfiguration()!.get<string>(config.cliUpdates);
