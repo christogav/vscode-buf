@@ -89,7 +89,9 @@ export class Installer {
     let version = buf.version();
     if (!(version instanceof Error)) {
       if (!isManaged && semver.lt(version, minVersion)) {
-        return new Error(`Detected installed Buf CLI ${version}, which does not support LSP.\nSee https://buf.build/docs/installation for installation instructions.`);
+        return new Error(
+          `Detected installed Buf CLI ${version}, which does not support LSP.\nSee https://buf.build/docs/installation for installation instructions.`
+        );
       } else if (isManaged) {
         // Run this asynchronously. This avoids blocking startup on doing an an
         // HTTP GET to GitHub's API.
@@ -115,25 +117,25 @@ export class Installer {
     return buf;
   }
 
-  async checkForUpdates(current?: string): Promise<Result<void>> {    
-    let release = await github.release('bufbuild', 'buf', 'latest');
+  async checkForUpdates(current?: string): Promise<Result<void>> {
+    let release = await github.release("bufbuild", "buf", "latest");
     if (release instanceof Error) {
       return release;
     }
-    let latest = release.tag_name; 
+    let latest = release.tag_name;
 
     let checkForUpdates = vscode.workspace.getConfiguration()!.get<string>(config.cliUpdates);
 
     if (!current) {
       let text = `The Buf CLI could not be found on your PATH.\nWould you like to download and install buf ${latest}`;
-      if(await vscode.window.showInformationMessage(text, `Install buf ${latest}`)) {
+      if (await vscode.window.showInformationMessage(text, `Install buf ${latest}`)) {
         return this.install(release);
       }
     } else if (semver.lt(current, latest) && checkForUpdates) {
       let text = `A new version of the Buf CLI is available. Would you like to upgrade? ${current} -> ${latest}`;
       let update = `Install buf ${latest}`;
       let dontCheck = "Don't ask again";
-      
+
       return vscode.window.showInformationMessage(text, update, dontCheck).then(async (choice) => {
         switch (choice) {
           case update:
@@ -157,58 +159,48 @@ export class Installer {
   }
 
   private async install(release: github.Release): Promise<Result<void>> {
-    let platform = getPlatform();
-    if (platform instanceof Error) {
-      return platform;
-    }
-    let name = `buf-${platform}.tar.gz`;
-    let asset;
-    for (let blob of release.assets) {
-      if (blob.name === name) {
-        asset = blob;
-        break;
-      }
-    }
-    if (!asset) {
-      return new Error(`Could not find ${platform} among release assets for ${release.tag_name}`);
+    // Find the appropriate asset for the current platform.
+    let asset = findPlatformAsset(release);
+    if (asset instanceof Error) {
+      return asset;
     }
 
     // Download the tarball into the temporary downloads directory.
-    let tarball = path.join(this.storageDir, `buf-${release.name}-${platform}.tar.gz`);
-    if (!fs.existsSync(tarball)) {
+    let assetPath = path.join(this.storageDir, getVersionedAssetName(asset, release.tag_name));
+    if (!fs.existsSync(assetPath)) {
       // Don't bother downloading if we've already got that version. This is
       // primarily to aid e.g. offline testing.
       fs.mkdirSync(this.storageDir, { recursive: true });
-      let result = await fetch.download(asset.browser_download_url, tarball, new AbortController());
+      let result = await fetch.download(asset.browser_download_url, assetPath, new AbortController());
       if (result instanceof Error) {
         return result;
       }
     }
 
-    // Extract the tarfile into the install directory.
-    try {
-      let extracted = path.join(this.storageDir, `buf-${release.name}`);
-      let target = path.join(this.storageDir, 'bin');
-      await promisify(stream.pipeline)(
-        fs.createReadStream(tarball),
-        gunzip(),
-        tar.extract(extracted),
-      );
-      
-      if (fs.existsSync(target)) {
-        fs.unlinkSync(target);
+    if (os.platform() === "win32") {
+      return new Error("Windows is not supported yet.");
+    } else {
+      // Extract the tarfile into the install directory.
+      try {
+        let extracted = path.join(this.storageDir, `buf-${release.name}`);
+        let target = path.join(this.storageDir, "bin");
+        await promisify(stream.pipeline)(fs.createReadStream(assetPath), gunzip(), tar.extract(extracted));
+
+        if (fs.existsSync(target)) {
+          fs.unlinkSync(target);
+        }
+        fs.symlinkSync(path.join(extracted, "buf/bin"), target);
+      } catch (e) {
+        return new Error(`Failed to extract ${assetPath}: ${e}`);
       }
-      fs.symlinkSync(path.join(extracted, 'buf/bin'), target);
-    } catch (e) {
-      return new Error(`Failed to extract ${tarball}: ${e}`);
     }
   }
 
   private bundledPath(): string {
-    return path.join(this.storageDir, 'bin/buf');
+    return path.join(this.storageDir, "bin/buf");
   }
   private tarballPath(): string {
-    return path.join(this.storageDir, 'buf.tar.gz');
+    return path.join(this.storageDir, "buf.tar.gz");
   }
 }
 
@@ -216,17 +208,38 @@ export function findWorkspacePath(): Result<string> {
   if (vscode.workspace.workspaceFolders === undefined) {
     return new Error("workspace folders was undefined");
   }
-  
+
   if (vscode.workspace.workspaceFolders.length === 0) {
     return new Error("workspace folders was not set");
   }
-  
+
   let uri = vscode.workspace.workspaceFolders[0].uri;
   if (uri.scheme !== "file") {
     return new Error(`uri was not file: ${uri.scheme}`);
   }
 
   return uri.fsPath;
+}
+
+function findPlatformAsset(release: github.Release): Result<github.Asset> {
+  let platform = getPlatform();
+  if (platform instanceof Error) {
+    return platform;
+  }
+  let name = `buf-${platform}.tar.gz`;
+  for (let blob of release.assets) {
+    if (blob.name === name) {
+      return blob;
+    }
+  }
+
+  return new Error(`Could not find ${platform} among release assets for ${release.tag_name}`);
+}
+
+function getVersionedAssetName(asset: github.Asset, version: string): string {
+  let basename = path.basename(asset.name);
+  let ext = path.extname(asset.name);
+  return `${basename}-${version}${ext}`;
 }
 
 function getPlatform(): Result<string> {
